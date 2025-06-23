@@ -1,126 +1,26 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState } from 'react';
 import Header from './components/Header';
 import InteractiveMap from './components/InteractiveMap';
 import LoadingSpinner from './components/LoadingSpinner';
 import ErrorMessage from './components/ErrorMessage';
-import { Association } from './types/association';
-import { fetchAssociations, geocodeAddress } from './services/associationsApi';
+import PerformanceStats from './components/PerformanceStats';
+import VirtualizedList from './components/VirtualizedList';
+import { useAssociations, useFilteredAssociations } from './hooks/useAssociations';
 
 function App() {
-  const [associations, setAssociations] = useState<Association[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [geocodingProgress, setGeocodingProgress] = useState(0);
-  const [geocodingStatus, setGeocodingStatus] = useState('');
-
-  const loadAssociations = async () => {
-    setLoading(true);
-    setError(null);
-    setGeocodingProgress(0);
-    setGeocodingStatus('Chargement des associations...');
-    
-    try {
-      const data = await fetchAssociations();
-      const associationsData = data.results;
-      
-      setGeocodingStatus('Géolocalisation des associations...');
-      
-      // Filtrer les associations avec des adresses valides
-      const associationsToGeocode = associationsData.filter(assoc => 
-        assoc.contact_adresse && assoc.contact_ville && assoc.contact_cp
-      );
-      
-      console.log(`${associationsToGeocode.length} associations à géocoder sur ${associationsData.length} total`);
-      
-      // Géocoder les adresses en lots plus petits pour éviter de surcharger l'API
-      const associationsWithCoords: Association[] = [];
-      const batchSize = 3; // Réduire la taille des lots
-      let geocodedCount = 0;
-      
-      for (let i = 0; i < associationsToGeocode.length; i += batchSize) {
-        const batch = associationsToGeocode.slice(i, i + batchSize);
-        
-        const batchPromises = batch.map(async (association) => {
-          try {
-            const coords = await geocodeAddress(
-              association.contact_adresse!,
-              association.contact_ville!,
-              association.contact_cp!
-            );
-            
-            if (coords) {
-              geocodedCount++;
-              return { ...association, coordinates: coords };
-            }
-            return association;
-          } catch (error) {
-            console.error(`Geocoding failed for ${association.nom}:`, error);
-            return association;
-          }
-        });
-        
-        const batchResults = await Promise.all(batchPromises);
-        associationsWithCoords.push(...batchResults);
-        
-        // Mettre à jour le progrès
-        const progress = (associationsWithCoords.length / associationsToGeocode.length) * 100;
-        setGeocodingProgress(Math.min(100, progress));
-        setGeocodingStatus(`Géolocalisées: ${geocodedCount}/${associationsToGeocode.length}`);
-        
-        // Pause plus longue pour éviter de surcharger l'API
-        if (i + batchSize < associationsToGeocode.length) {
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
-      }
-      
-      // Ajouter les associations sans adresse
-      const associationsWithoutAddress = associationsData.filter(assoc => 
-        !assoc.contact_adresse || !assoc.contact_ville || !assoc.contact_cp
-      );
-      
-      const finalAssociations = [...associationsWithCoords, ...associationsWithoutAddress];
-      
-      console.log(`Géocodage terminé: ${geocodedCount} associations géolocalisées`);
-      setAssociations(finalAssociations);
-      
-    } catch (err) {
-      setError('Erreur lors du chargement des associations. Vérifiez votre connexion internet.');
-      console.error('Error loading associations:', err);
-    } finally {
-      setLoading(false);
-      setGeocodingProgress(0);
-      setGeocodingStatus('');
-    }
-  };
-
-  useEffect(() => {
-    loadAssociations();
-  }, []);
-
-  // Filter associations based on search query
-  const filteredAssociations = useMemo(() => {
-    if (!searchQuery.trim()) {
-      return associations;
-    }
-
-    const query = searchQuery.toLowerCase().trim();
-    return associations.filter((association) => {
-      return (
-        association.nom?.toLowerCase().includes(query) ||
-        association.liste_activites?.some(activite => 
-          activite.toLowerCase().includes(query)
-        ) ||
-        association.contact_ville?.toLowerCase().includes(query) ||
-        association.description?.toLowerCase().includes(query) ||
-        association.sigle?.toLowerCase().includes(query)
-      );
-    });
-  }, [associations, searchQuery]);
-
-  const handleRetry = () => {
-    loadAssociations();
-  };
+  const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
+  const { 
+    associations, 
+    loading, 
+    error, 
+    geocodingProgress, 
+    geocodingStatus, 
+    performanceStats,
+    retry 
+  } = useAssociations();
+  
+  const filteredAssociations = useFilteredAssociations(associations, searchQuery);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -131,7 +31,43 @@ function App() {
       />
       
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="h-[calc(100vh-200px)] min-h-[500px]">
+        {!loading && !error && (
+          <>
+            <PerformanceStats
+              totalAssociations={associations.length}
+              geocodedAssociations={performanceStats.geocodedCount}
+              loadingTime={performanceStats.loadingTime}
+              cacheHit={performanceStats.cacheHit}
+            />
+            
+            <div className="flex justify-center mb-4">
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-1">
+                <button
+                  onClick={() => setViewMode('map')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    viewMode === 'map'
+                      ? 'bg-bordeaux-600 text-white'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  }`}
+                >
+                  🗺️ Vue Carte
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    viewMode === 'list'
+                      ? 'bg-bordeaux-600 text-white'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  }`}
+                >
+                  📋 Vue Liste
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+        
+        <div className="h-[calc(100vh-300px)] min-h-[500px]">
           {loading ? (
             <div className="flex flex-col items-center justify-center h-64">
               <LoadingSpinner />
@@ -153,9 +89,14 @@ function App() {
               )}
             </div>
           ) : error ? (
-            <ErrorMessage message={error} onRetry={handleRetry} />
-          ) : (
+            <ErrorMessage message={error} onRetry={retry} />
+          ) : viewMode === 'map' ? (
             <InteractiveMap associations={filteredAssociations} />
+          ) : (
+            <VirtualizedList 
+              associations={filteredAssociations} 
+              searchQuery={searchQuery}
+            />
           )}
         </div>
       </main>
