@@ -1,7 +1,9 @@
+import { RemarkModal } from '@/components/RemarkModal';
+import { StarModal } from '@/components/StarModal';
 import { ThemedText } from '@/components/ThemedText';
 import { Toilet } from '@/types/Toilet';
-import { getToiletIcon } from '@/utils/toiletParser';
-import { useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useEffect, useState } from 'react';
 import { Linking, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
@@ -21,6 +23,10 @@ export function ToiletDetail({ toilet, visible, onClose }: ToiletDetailProps) {
   const modalScale = useSharedValue(0);
   const modalOpacity = useSharedValue(0);
   const contentTranslateY = useSharedValue(50);
+  const [remarkModalVisible, setRemarkModalVisible] = useState(false);
+  const [starModalVisible, setStarModalVisible] = useState(false);
+  const [currentRemark, setCurrentRemark] = useState<string>('');
+  const [currentRating, setCurrentRating] = useState<number>(0);
 
   const openMaps = () => {
     if (!toilet) return;
@@ -57,6 +63,10 @@ export function ToiletDetail({ toilet, visible, onClose }: ToiletDetailProps) {
         damping: 20,
         stiffness: 90,
       });
+      
+      // Charger la remarque existante
+      loadRemark();
+      loadRating();
     } else {
       modalScale.value = withTiming(0.8, {
         duration: 200,
@@ -72,6 +82,56 @@ export function ToiletDetail({ toilet, visible, onClose }: ToiletDetailProps) {
       });
     }
   }, [visible]);
+
+  const loadRemark = async () => {
+    if (!toilet) return;
+    
+    try {
+      const remarkKey = `toilet_remark_${toilet.coordinates.latitude}_${toilet.coordinates.longitude}`;
+      const remark = await AsyncStorage.getItem(remarkKey);
+      setCurrentRemark(remark || '');
+    } catch (error) {
+      console.error('Erreur lors du chargement de la remarque:', error);
+    }
+  };
+
+  const loadRating = async () => {
+    if (!toilet) return;
+    
+    try {
+      const ratingKey = `toilet_rating_${toilet.coordinates.latitude}_${toilet.coordinates.longitude}`;
+      const rating = await AsyncStorage.getItem(ratingKey);
+      setCurrentRating(rating ? parseInt(rating, 10) : 0);
+    } catch (error) {
+      console.error('Erreur lors du chargement de la note:', error);
+    }
+  };
+
+  const handleRemarkSaved = (remark: string) => {
+    setCurrentRemark(remark);
+  };
+
+  const handleRatingSaved = (rating: number) => {
+    setCurrentRating(rating);
+  };
+
+  const renderStars = (rating: number) => {
+    const stars = [];
+    for (let i = 1; i <= 5; i++) {
+      stars.push(
+        <ThemedText
+          key={i}
+          style={[
+            styles.displayStar,
+            { color: i <= rating ? '#FFD700' : '#E9ECEF' }
+          ]}
+        >
+          ⭐
+        </ThemedText>
+      );
+    }
+    return stars;
+  };
 
   const modalAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: modalScale.value }],
@@ -136,6 +196,31 @@ export function ToiletDetail({ toilet, visible, onClose }: ToiletDetailProps) {
                 </ThemedText>
               </View>
             </View>
+
+            {currentRemark && (
+              <View style={styles.remarkContainer}>
+                <ThemedText type="defaultSemiBold" style={styles.remarkLabel}>
+                  📝 Votre remarque:
+                </ThemedText>
+                <View style={styles.remarkCard}>
+                  <ThemedText style={styles.remarkText}>{currentRemark}</ThemedText>
+                </View>
+              </View>
+            )}
+
+            {currentRating > 0 && (
+              <View style={styles.ratingContainer}>
+                <ThemedText type="defaultSemiBold" style={styles.ratingLabel}>
+                  ⭐ Votre note:
+                </ThemedText>
+                <View style={styles.ratingDisplay}>
+                  {renderStars(currentRating)}
+                  <ThemedText style={styles.ratingText}>
+                    ({currentRating}/5)
+                  </ThemedText>
+                </View>
+              </View>
+            )}
           </Animated.View>
 
           <View style={styles.buttonContainer}>
@@ -144,6 +229,24 @@ export function ToiletDetail({ toilet, visible, onClose }: ToiletDetailProps) {
               onPress={openMaps}
             >
               <ThemedText style={styles.routeButtonText}>🚗 Prendre la route</ThemedText>
+            </Pressable>
+
+            <Pressable
+              style={styles.remarkButton}
+              onPress={() => setRemarkModalVisible(true)}
+            >
+              <ThemedText style={styles.remarkButtonText}>
+                📝 {currentRemark ? 'Modifier la remarque' : 'Ajouter une remarque'}
+              </ThemedText>
+            </Pressable>
+
+            <Pressable
+              style={styles.starButton}
+              onPress={() => setStarModalVisible(true)}
+            >
+              <ThemedText style={styles.starButtonText}>
+                ⭐ {currentRating > 0 ? 'Modifier la note' : 'Noter ces toilettes'}
+              </ThemedText>
             </Pressable>
           </View>
 
@@ -155,6 +258,20 @@ export function ToiletDetail({ toilet, visible, onClose }: ToiletDetailProps) {
           </Pressable>
         </Animated.View>
       </View>
+
+      <RemarkModal
+        toilet={toilet}
+        visible={remarkModalVisible}
+        onClose={() => setRemarkModalVisible(false)}
+        onRemarkSaved={handleRemarkSaved}
+      />
+
+      <StarModal
+        toilet={toilet}
+        visible={starModalVisible}
+        onClose={() => setStarModalVisible(false)}
+        onRatingSaved={handleRatingSaved}
+      />
     </Modal>
   );
 }
@@ -295,6 +412,82 @@ const styles = StyleSheet.create({
   },
   closeButtonText: {
     color: 'white',
+    fontWeight: '700',
+    textAlign: 'center',
+    fontSize: 16,
+  },
+  remarkContainer: {
+    marginTop: 20,
+  },
+  remarkLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#495057',
+    marginBottom: 10,
+  },
+  remarkCard: {
+    backgroundColor: '#E8F4FD',
+    borderRadius: 12,
+    padding: 15,
+    borderLeftWidth: 4,
+    borderLeftColor: '#007AFF',
+  },
+  remarkText: {
+    fontSize: 14,
+    color: '#495057',
+    lineHeight: 20,
+    fontStyle: 'italic',
+  },
+  remarkButton: {
+    width: '100%',
+    backgroundColor: '#28A745',
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  remarkButtonText: {
+    color: 'white',
+    fontWeight: '700',
+    textAlign: 'center',
+    fontSize: 16,
+  },
+  ratingContainer: {
+    marginTop: 20,
+  },
+  ratingLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#495057',
+    marginBottom: 10,
+  },
+  ratingDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  displayStar: {
+    fontSize: 24,
+  },
+  ratingText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#495057',
+    marginLeft: 10,
+  },
+  starButton: {
+    width: '100%',
+    backgroundColor: '#FFD700',
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  starButtonText: {
+    color: '#212529',
     fontWeight: '700',
     textAlign: 'center',
     fontSize: 16,
