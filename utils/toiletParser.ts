@@ -58,12 +58,12 @@ export function getToiletIcon(type: string): string {
 export function getToiletColor(type: string): string {
   switch (type) {
     case 'SANITAIRE_AUTOMATIQUE':
-      return '#4CAF50'; // Green
+      return '#28A745'; // Bootstrap success green
     case 'URINOIR':
-      return '#2196F3'; // Blue
+      return '#007BFF'; // Bootstrap primary blue
     case 'CHALET_DE_NECESSITE':
-      return '#FF9800'; // Orange
+      return '#FD7E14'; // Bootstrap warning orange
     default:
-      return '#9E9E9E'; // Grey
+      return '#6C757D'; // Bootstrap secondary grey
   }
 }
