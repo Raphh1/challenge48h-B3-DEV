@@ -1,18 +1,15 @@
-import React, { useEffect } from 'react';
-import { View, StyleSheet, Modal, Pressable, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import Animated, { 
-  useSharedValue, 
-  useAnimatedStyle, 
-  withSpring, 
-  withTiming,
-  Easing,
-  runOnJS
-} from 'react-native-reanimated';
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
 import { Toilet } from '@/types/Toilet';
 import { getToiletIcon } from '@/utils/toiletParser';
+import { useEffect } from 'react';
+import { Linking, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming
+} from 'react-native-reanimated';
 
 interface ToiletDetailProps {
   toilet: Toilet | null;
@@ -24,6 +21,27 @@ export function ToiletDetail({ toilet, visible, onClose }: ToiletDetailProps) {
   const modalScale = useSharedValue(0);
   const modalOpacity = useSharedValue(0);
   const contentTranslateY = useSharedValue(50);
+
+  const openMaps = () => {
+    if (!toilet) return;
+    
+    const { latitude, longitude } = toilet.coordinates;
+    const label = encodeURIComponent(toilet.adresse);
+    
+    const url = Platform.select({
+      ios: `maps:${latitude},${longitude}?q=${label}`,
+      android: `geo:${latitude},${longitude}?q=${latitude},${longitude}(${label})`,
+      default: `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`,
+    });
+
+    if (url) {
+      Linking.openURL(url).catch((err) => {
+        console.error('Erreur lors de l\'ouverture de Maps:', err);
+        // Fallback vers Google Maps web
+        Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`);
+      });
+    }
+  };
 
   useEffect(() => {
     if (visible) {
@@ -76,13 +94,11 @@ export function ToiletDetail({ toilet, visible, onClose }: ToiletDetailProps) {
       <View style={styles.centeredView}>
         <Animated.View style={[styles.modalView, modalAnimatedStyle]}>
           <View style={styles.header}>
-            <Animated.View style={contentAnimatedStyle}>
-              <ThemedText style={styles.emoji}>
-                {getToiletIcon(toilet.type)}
-              </ThemedText>
+            <Animated.View style={[styles.headerContent, contentAnimatedStyle]}>
               <ThemedText type="title" style={styles.title}>
                 Toilettes publiques
               </ThemedText>
+
             </Animated.View>
           </View>
 
@@ -122,6 +138,15 @@ export function ToiletDetail({ toilet, visible, onClose }: ToiletDetailProps) {
             </View>
           </Animated.View>
 
+          <View style={styles.buttonContainer}>
+            <Pressable
+              style={styles.routeButton}
+              onPress={openMaps}
+            >
+              <ThemedText style={styles.routeButtonText}>🚗 Prendre la route</ThemedText>
+            </Pressable>
+          </View>
+
           <Pressable
             style={styles.closeButton}
             onPress={onClose}
@@ -156,20 +181,29 @@ const styles = StyleSheet.create({
     elevation: 10,
     maxWidth: '90%',
     width: 380,
+    maxHeight: '90%',
     overflow: 'hidden',
   },
   header: {
     width: '100%',
-    paddingVertical: 30,
+    paddingVertical: 35,
     paddingHorizontal: 20,
     backgroundColor: '#F8F9FA',
     borderBottomWidth: 1,
     borderBottomColor: '#E9ECEF',
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 90,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    paddingVertical: 5,
   },
   emoji: {
-    fontSize: 48,
-    marginBottom: 12,
+    fontSize: 32,
   },
   title: {
     textAlign: 'center',
@@ -231,6 +265,26 @@ const styles = StyleSheet.create({
     marginLeft: 15,
     fontFamily: 'monospace',
     color: '#ADB5BD',
+  },
+  buttonContainer: {
+    width: '100%',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+  },
+  routeButton: {
+    width: '100%',
+    backgroundColor: '#007AFF',
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  routeButtonText: {
+    color: 'white',
+    fontWeight: '700',
+    textAlign: 'center',
+    fontSize: 16,
   },
   closeButton: {
     width: '100%',
