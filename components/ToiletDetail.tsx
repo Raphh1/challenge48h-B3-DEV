@@ -32,19 +32,22 @@ export function ToiletDetail({ toilet, visible, onClose }: ToiletDetailProps) {
     if (!toilet) return;
     
     const { latitude, longitude } = toilet.coordinates;
-    const label = encodeURIComponent(toilet.adresse);
     
+    // Construire l'URL en fonction de la plateforme - utilisation directe des coordonnées
     const url = Platform.select({
-      ios: `maps:${latitude},${longitude}?q=${label}`,
-      android: `geo:${latitude},${longitude}?q=${latitude},${longitude}(${label})`,
-      default: `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`,
+      ios: `maps:${latitude},${longitude}?q=${latitude},${longitude}&ll=${latitude},${longitude}`,
+      android: `geo:${latitude},${longitude}?q=${latitude},${longitude}&z=16`,
+      default: `https://www.google.com/maps?q=${latitude},${longitude}&z=16`,
     });
 
     if (url) {
       Linking.openURL(url).catch((err) => {
         console.error('Erreur lors de l\'ouverture de Maps:', err);
-        // Fallback vers Google Maps web
-        Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`);
+        // Fallback universel vers Google Maps web avec coordonnées exactes
+        const fallbackUrl = `https://www.google.com/maps?q=${latitude},${longitude}&z=16`;
+        Linking.openURL(fallbackUrl).catch((fallbackErr) => {
+          console.error('Erreur fallback Maps:', fallbackErr);
+        });
       });
     }
   };
